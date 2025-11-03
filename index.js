@@ -145,6 +145,7 @@ app.get('/favicon.ico', (req, res) => res.status(204).end());
    SAĞLIK & QR
    =========================== */
 app.get('/ping', (req, res) => res.send('pong 🏓'));
+app.get('/healthz', (req, res) => res.send('ok'));
 
 app.get('/qr', async (req, res) => {
   try {
