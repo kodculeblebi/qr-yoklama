@@ -64,115 +64,91 @@
     </div>
   </div>
 
-  <script>
-    const codeInput = document.getElementById('codeInput');
-    const checkBtn = document.getElementById('checkBtn');
-    const nameInput = document.getElementById('nameInput');
-    const noInput   = document.getElementById('noInput');
-    const msg = document.getElementById('msg');
+ <script>
+(function () {
+  // URL parametrelerini oku
+  const url = new URL(window.location.href);
+  const codeFromUrl = url.searchParams.get('code');
+  const auto = url.searchParams.get('auto') === '1';
 
-    const okOverlay = document.getElementById('okOverlay');
-    const okCode = document.getElementById('okCode');
-    const okWhen = document.getElementById('okWhen');
+  // Form alanlarını bul
+  const codeInput = document.getElementById('code');          // yoklama kodu inputu
+  const snoInput  = document.getElementById('studentNo');     // öğrenci no inputu
+  const nameInput = document.getElementById('name');          // ad soyad (opsiyonel)
+  const msgBox    = document.getElementById('msg');           // mesaj/sonuç göstermek için
 
-    // Profil: önce localStorage, sonra sunucudan cihaz profili
-    (async function preloadProfile(){
-      const savedName = localStorage.getItem('qr_name') || '';
-      const savedNo   = localStorage.getItem('qr_studentNo') || '';
-      if (savedName) nameInput.value = savedName;
-      if (savedNo)   noInput.value   = savedNo;
+  // 1) URL'den gelen kodu al ve kutuya yaz (varsa)
+  if (codeFromUrl) codeInput.value = codeFromUrl;
 
-      if (!savedName || !savedNo) {
-        try {
-          const r = await fetch('/api/device-profile');
-          if (r.ok) {
-            const p = await r.json();
-            if (p.name && !nameInput.value) nameInput.value = p.name;
-            if (p.studentNo && !noInput.value) noInput.value = p.studentNo;
-            // localStorage'a da yazalım
-            if (p.name) localStorage.setItem('qr_name', p.name);
-            if (p.studentNo) localStorage.setItem('qr_studentNo', p.studentNo);
-          }
-        } catch(e) {}
+  // 2) Öğrenci numarasını localStorage'dan hatırla (cihaz bazlı)
+  const savedNo = localStorage.getItem('studentNo');
+  if (savedNo && !snoInput.value) {
+    snoInput.value = savedNo;
+  }
+
+  // 3) Otomatik gönderme: kod var + auto=1 + studentNo biliniyorsa -> otomatik yoklama
+  async function submitCheckIn() {
+    const code = (codeInput.value || '').trim();
+    const studentNo = (snoInput.value || '').trim();
+    const name = (nameInput?.value || '').trim();
+
+    if (!code) { msgBox.textContent = 'Kod bulunamadı'; msgBox.style.color = 'red'; return; }
+    if (!studentNo) { msgBox.textContent = 'Öğrenci numarası gerekli'; msgBox.style.color = 'red'; return; }
+
+    // studentNo'yu hatırla
+    localStorage.setItem('studentNo', studentNo);
+
+    msgBox.textContent = 'Gönderiliyor...';
+    msgBox.style.color = '#333';
+
+    try {
+      const res = await fetch('/api/check-in', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ code, studentNo, name })
+      });
+      const data = await res.json();
+
+      if (data.status === 'success' || data.status === 'already_checked') {
+        // başarılı ekran (yeşil)
+        msgBox.textContent = data.status === 'success'
+          ? 'Başarılı: yoklama alındı ✅'
+          : 'Bu kod için daha önce yoklama vermişsiniz ✅';
+        msgBox.style.color = 'green';
+        // formu kilitle
+        codeInput.disabled = true;
+        snoInput.disabled = true;
+        if (nameInput) nameInput.disabled = true;
+      } else {
+        msgBox.textContent = 'Hata: ' + (data.message || data.status || 'bilinmiyor');
+        msgBox.style.color = 'red';
       }
-    })();
-
-    nameInput.addEventListener('input', () => {
-      localStorage.setItem('qr_name', nameInput.value.trim());
-    });
-    noInput.addEventListener('input', () => {
-      localStorage.setItem('qr_studentNo', noInput.value.trim());
-    });
-
-    function showSuccessOverlay(code) {
-      if (navigator.vibrate) navigator.vibrate(60);
-      okCode.textContent = 'Kod: ' + (code || '-');
-      okWhen.textContent = 'Zaman: ' + new Date().toLocaleString();
-      okOverlay.style.display = 'flex';
-      setTimeout(() => { okOverlay.style.display = 'none'; }, 2000);
+    } catch (e) {
+      msgBox.textContent = 'Sunucu hatası';
+      msgBox.style.color = 'red';
     }
+  }
 
-    async function registerDeviceProfile(name, studentNo) {
-      try {
-        if (!name && !studentNo) return;
-        await fetch('/api/register-device', {
-          method: 'POST',
-          headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({ name, studentNo })
-        });
-      } catch(e) { /* sessiz */ }
-    }
+  // Sayfa yüklenince otomatik gönder
+  if (codeFromUrl && auto && (savedNo || snoInput.value)) {
+    // ufak gecikme: alanlar dolsun
+    setTimeout(submitCheckIn, 300);
+  }
 
-    async function sendCheckIn(code) {
-      msg.textContent = 'Gönderiliyor...';
-      const name = nameInput.value.trim();
-      const studentNo = noInput.value.trim();
+  // "Gönder" butonu varsa tıklandığında submitCheckIn çağır
+  const btn = document.getElementById('submitBtn');
+  if (btn) btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    submitCheckIn();
+  });
 
-      // profili cihazda sakla + sunucuda kaydet (dayanıklılık)
-      localStorage.setItem('qr_name', name);
-      localStorage.setItem('qr_studentNo', studentNo);
-      registerDeviceProfile(name, studentNo);
-
-      try {
-        const res = await fetch('/api/check-in', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code, name, studentNo })
-        });
-        const data = await res.json();
-        if (data.status === 'success') {
-          msg.textContent = '✅ Yoklama alındı.';
-          showSuccessOverlay(code);
-        } else if (data.status === 'already_checked') {
-          msg.textContent = '⚠️ Bu cihaz bu yoklamayı zaten vermiş.';
-        } else {
-          msg.textContent = '❌ Hata: ' + (data.message || 'Bilinmeyen hata');
-        }
-      } catch(e) {
-        msg.textContent = '❌ Sunucu hatası veya bağlantı sorunu';
-      }
-    }
-
-    checkBtn.addEventListener('click', () => {
-      const code = codeInput.value.trim();
-      if (!code) { msg.textContent = 'Kod boş olamaz.'; return; }
-      sendCheckIn(code);
+  // Enter'a basınca da gönder
+  [codeInput, snoInput, nameInput].forEach(el => {
+    if (el) el.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') { ev.preventDefault(); submitCheckIn(); }
     });
-
-    function onScanSuccess(decodedText) {
-      codeInput.value = decodedText;
-      sendCheckIn(decodedText);
-    }
-
-    // Kamera başlat
-    const html5QrCode = new Html5Qrcode("reader");
-    Html5Qrcode.getCameras().then(devices => {
-      const camId = devices && devices.length ? devices[0].id : null;
-      if (!camId) { msg.textContent = 'Kamera bulunamadı.'; return; }
-      html5QrCode.start(camId, { fps: 10, qrbox: 220 }, onScanSuccess, () => {});
-    }).catch(() => {
-      msg.textContent = 'Kameraya erişilemedi. Tarayıcıdan izin verin.';
-    });
-  </script>
+  });
+})();
+</script>
 </body>
 </html>

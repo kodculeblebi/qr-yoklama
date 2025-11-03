@@ -147,11 +147,21 @@ app.get('/favicon.ico', (req, res) => res.status(204).end());
 app.get('/ping', (req, res) => res.send('pong 🏓'));
 app.get('/healthz', (req, res) => res.send('ok'));
 
+// ---- QR üretme (derin link ile)
 app.get('/qr', async (req, res) => {
   try {
-    const text = req.query.t || req.query.text || 'Merhaba 👋';
-    const pngBuffer = await QRCode.toBuffer(text, {
-      type: 'png', errorCorrectionLevel: 'M', margin: 2, scale: 6
+    // İstenilen kod (t, code veya text parametresi ile gelebilir)
+    const code = (req.query.code || req.query.t || req.query.text || 'DEMO').toString().trim();
+
+    // Tam URL: https://host/scan?code=...&auto=1
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const deepLink = `${baseUrl}/scan?code=${encodeURIComponent(code)}&auto=1`;
+
+    const pngBuffer = await QRCode.toBuffer(deepLink, {
+      type: 'png',
+      errorCorrectionLevel: 'M',
+      margin: 2,
+      scale: 6
     });
     res.set('Content-Type', 'image/png');
     res.send(pngBuffer);
@@ -159,6 +169,7 @@ app.get('/qr', async (req, res) => {
     console.error(err);
     res.status(500).send('QR üretilemedi');
   }
+});
 });
 
 /* ===========================
