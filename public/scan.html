@@ -2,152 +2,93 @@
 <html lang="tr">
 <head>
   <meta charset="utf-8" />
+  <title>Yoklama • Scan</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>QR Tarayıcı</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 1rem; }
-    .card { max-width: 720px; padding: 1rem; border:1px solid #ddd; border-radius: 12px; }
-    #reader { width: 320px; margin-top: 1rem; }
-    .row { display:flex; gap:.5rem; flex-wrap:wrap; margin:.5rem 0; }
-    input[type="text"] { flex:1; min-width: 260px; padding:.6rem .8rem; border:1px solid #bbb; border-radius:8px; }
-    button { padding:.6rem 1rem; border:1px solid #222; background:#222; color:#fff; border-radius:8px; cursor:pointer; }
-    .msg { margin-top:.5rem; font-weight:bold; }
-    a { display:inline-block; margin:.5rem 0; }
-
-    /* Tam ekran başarı katmanı */
-    .overlay {
-      position: fixed; inset: 0; display: none;
-      align-items: center; justify-content: center;
-      background: rgba(0,0,0,0.4); z-index: 9999;
-    }
-    .overlay .box {
-      background: #0bbf5e; color: #fff; padding: 2rem;
-      border-radius: 16px; text-align: center; max-width: 420px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-    }
-    .overlay h2 { margin: 0 0 .5rem 0; font-size: 1.6rem; }
-    .overlay p { margin: .25rem 0; }
-    .overlay .small { opacity: .95; font-size: .95rem; }
+    body{font-family:system-ui,Arial,sans-serif;max-width:680px;margin:24px auto;padding:0 12px}
+    input,button{font-size:18px;padding:10px;width:100%;box-sizing:border-box}
+    .row{display:flex;gap:8px}
+    .ok{color:#0a0}.err{color:#c00}.muted{color:#666}
+    .card{border:1px solid #ddd;border-radius:12px;padding:16px;margin:16px 0}
+    .big{font-size:20px}
   </style>
-  <script src="https://unpkg.com/html5-qrcode"></script>
 </head>
 <body>
+  <h2>Yoklama</h2>
+
   <div class="card">
-    <h2>QR Tarayıcı</h2>
-    <p>Kamerayı açıp QR’ı okut. Kod okununca profilin (Ad/No) otomatik eklenir ve yoklama gönderilir.</p>
-
-    <div id="reader"></div>
-
-    <div class="row">
-      <input id="codeInput" type="text" placeholder="Okunan yoklama kodu" />
-      <button id="checkBtn">Yoklamayı Ver</button>
+    <div class="muted">Kod</div>
+    <input id="code" placeholder="(otomatik dolar)" />
+    <div class="muted" style="margin-top:8px">Öğrenci Numarası</div>
+    <input id="studentNo" placeholder="Örn: 20123456" inputmode="numeric" />
+    <div class="muted" style="margin-top:8px">Ad Soyad (opsiyonel)</div>
+    <input id="name" placeholder="(Opsiyonel)" />
+    <div class="row" style="margin-top:12px">
+      <button id="submitBtn">Gönder</button>
     </div>
-
-    <!-- Profil (cihazda saklanır + sunucuda device profile olarak tutulur) -->
-    <div class="row">
-      <input id="nameInput" type="text" placeholder="Ad Soyad" />
-      <input id="noInput" type="text" placeholder="Öğrenci No" />
-    </div>
-
-    <div id="msg" class="msg"></div>
-
-    <a href="/">← Ana Sayfa</a>
+    <div id="msg" class="big" style="margin-top:10px"></div>
   </div>
 
-  <!-- YEŞİL BAŞARI KATMANI -->
-  <div id="okOverlay" class="overlay" role="dialog" aria-live="assertive">
-    <div class="box">
-      <h2>✅ Yoklama Alındı</h2>
-      <p id="okCode" class="small"></p>
-      <p id="okWhen" class="small"></p>
-      <p class="small">Bu cihaz tanındı. Tekrar okutursan otomatik gönderilir.</p>
-    </div>
-  </div>
+<script>
+(async function(){
+  const u = new URL(location.href);
+  const codeFromUrl = u.searchParams.get('code');
+  const auto = u.searchParams.get('auto') === '1';
+  const codeInput = document.getElementById('code');
+  const snoInput = document.getElementById('studentNo');
+  const nameInput = document.getElementById('name');
+  const msg = document.getElementById('msg');
 
- <script>
-(function () {
-  // URL parametrelerini oku
-  const url = new URL(window.location.href);
-  const codeFromUrl = url.searchParams.get('code');
-  const auto = url.searchParams.get('auto') === '1';
-
-  // Form alanlarını bul
-  const codeInput = document.getElementById('code');          // yoklama kodu inputu
-  const snoInput  = document.getElementById('studentNo');     // öğrenci no inputu
-  const nameInput = document.getElementById('name');          // ad soyad (opsiyonel)
-  const msgBox    = document.getElementById('msg');           // mesaj/sonuç göstermek için
-
-  // 1) URL'den gelen kodu al ve kutuya yaz (varsa)
-  if (codeFromUrl) codeInput.value = codeFromUrl;
-
-  // 2) Öğrenci numarasını localStorage'dan hatırla (cihaz bazlı)
-  const savedNo = localStorage.getItem('studentNo');
-  if (savedNo && !snoInput.value) {
-    snoInput.value = savedNo;
+  // 1) Kod: URL'den, yoksa sunucudan aktif kod
+  if (codeFromUrl) {
+    codeInput.value = codeFromUrl;
+  } else {
+    try{
+      const r = await fetch('/api/active-code'); const a = await r.json();
+      if (a.code) codeInput.value = a.code;
+    }catch{}
   }
 
-  // 3) Otomatik gönderme: kod var + auto=1 + studentNo biliniyorsa -> otomatik yoklama
-  async function submitCheckIn() {
-    const code = (codeInput.value || '').trim();
-    const studentNo = (snoInput.value || '').trim();
-    const name = (nameInput?.value || '').trim();
+  // 2) Öğrenci No: cihazda hatırla
+  const savedNo = localStorage.getItem('studentNo');
+  if (savedNo && !snoInput.value) snoInput.value = savedNo;
 
-    if (!code) { msgBox.textContent = 'Kod bulunamadı'; msgBox.style.color = 'red'; return; }
-    if (!studentNo) { msgBox.textContent = 'Öğrenci numarası gerekli'; msgBox.style.color = 'red'; return; }
+  async function send() {
+    const code = (codeInput.value||'').trim();
+    const studentNo = (snoInput.value||'').trim();
+    const name = (nameInput.value||'').trim();
+    if (!code) { msg.textContent='Kod yok'; msg.className='err'; return; }
+    if (!studentNo) { msg.textContent='Öğrenci numarası gerekli'; msg.className='err'; return; }
 
-    // studentNo'yu hatırla
     localStorage.setItem('studentNo', studentNo);
-
-    msgBox.textContent = 'Gönderiliyor...';
-    msgBox.style.color = '#333';
-
-    try {
-      const res = await fetch('/api/check-in', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+    msg.textContent = 'Gönderiliyor...'; msg.className='muted';
+    try{
+      const r = await fetch('/api/check-in', {
+        method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ code, studentNo, name })
       });
-      const data = await res.json();
-
-      if (data.status === 'success' || data.status === 'already_checked') {
-        // başarılı ekran (yeşil)
-        msgBox.textContent = data.status === 'success'
-          ? 'Başarılı: yoklama alındı ✅'
-          : 'Bu kod için daha önce yoklama vermişsiniz ✅';
-        msgBox.style.color = 'green';
-        // formu kilitle
-        codeInput.disabled = true;
-        snoInput.disabled = true;
-        if (nameInput) nameInput.disabled = true;
+      const data = await r.json();
+      if (data.status === 'success') {
+        msg.textContent = 'Başarılı: yoklama alındı ✅'; msg.className='ok';
+      } else if (data.status === 'already_checked') {
+        msg.textContent = 'Bu kod için zaten yoklama verdiniz ✅'; msg.className='ok';
       } else {
-        msgBox.textContent = 'Hata: ' + (data.message || data.status || 'bilinmiyor');
-        msgBox.style.color = 'red';
+        msg.textContent = 'Hata: '+(data.message||data.status); msg.className='err';
       }
-    } catch (e) {
-      msgBox.textContent = 'Sunucu hatası';
-      msgBox.style.color = 'red';
+    }catch(e){
+      msg.textContent = 'Sunucu hatası'; msg.className='err';
     }
   }
 
-  // Sayfa yüklenince otomatik gönder
-  if (codeFromUrl && auto && (savedNo || snoInput.value)) {
-    // ufak gecikme: alanlar dolsun
-    setTimeout(submitCheckIn, 300);
+  // İlk gelişte otomatik gönder: kod + öğrenciNo varsa
+  if ((codeInput.value || codeFromUrl) && (savedNo || snoInput.value) && auto) {
+    setTimeout(send, 300);
   }
 
-  // "Gönder" butonu varsa tıklandığında submitCheckIn çağır
-  const btn = document.getElementById('submitBtn');
-  if (btn) btn.addEventListener('click', (e) => {
-    e.preventDefault();
-    submitCheckIn();
-  });
-
-  // Enter'a basınca da gönder
-  [codeInput, snoInput, nameInput].forEach(el => {
-    if (el) el.addEventListener('keydown', (ev) => {
-      if (ev.key === 'Enter') { ev.preventDefault(); submitCheckIn(); }
-    });
-  });
+  document.getElementById('submitBtn').onclick = (e)=>{ e.preventDefault(); send(); };
+  [codeInput, snoInput, nameInput].forEach(el => el.addEventListener('keydown', ev=>{
+    if (ev.key === 'Enter') { ev.preventDefault(); send(); }
+  }));
 })();
 </script>
 </body>

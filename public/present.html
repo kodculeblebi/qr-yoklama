@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <title>Yansıtma • QR</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    html,body{height:100%;margin:0}
+    body{display:flex;align-items:center;justify-content:center;background:#111;color:#fff;font-family:system-ui,Arial,sans-serif}
+    #wrap{max-width:92vw;text-align:center}
+    #code{font-size:4vw;margin:1vh 0}
+    img{max-width:90vw;max-height:75vh;border-radius:16px}
+    .muted{color:#bbb}
+  </style>
+</head>
+<body>
+  <div id="wrap">
+    <div class="muted">Aktif Kod</div>
+    <div id="code">—</div>
+    <img id="qr" alt="QR" />
+    <div class="muted" style="margin-top:8px">QR telefona okutulunca otomatik /scan açılır.</div>
+  </div>
+
+<script>
+async function refresh(){
+  try{
+    const r = await fetch('/api/active-code'); const a = await r.json();
+    const c = a.code || '';
+    document.getElementById('code').textContent = c || 'Kod yok';
+    document.getElementById('qr').src = c ? (`/qr?code=${encodeURIComponent(c)}&v=${Date.now()}`) : '';
+  }catch(e){}
+}
+refresh();
+setInterval(refresh, 4000);
+</script>
+</body>
+</html>
