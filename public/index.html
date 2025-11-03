@@ -21,7 +21,7 @@
 <body>
   <div class="card">
     <h1>QR Yoklama</h1>
-    <p class="ok">Sunucu çalışıyor ise bu sayfayı görürsün ✅</p>
+    
 
     <!-- QR üretme -->
     <div class="row">
@@ -30,6 +30,21 @@
     </div>
     <small>İpucu: Metne yoklama kodu yaz. Örn: <b>DÜYBS-2025-11-02-1</b></small>
     <img id="qrImage" alt="QR görüntüsü burada belirecek" />
+<!-- Kullanıcı kod girsin -->
+<input id="codeInput" placeholder="Örn: YBS311-01" />
+<button id="makeQr">QR Oluştur</button>
+<br><br>
+<img id="qrImg" alt="QR" style="max-width:240px;">
+
+<script>
+document.getElementById('makeQr').addEventListener('click', () => {
+  const c = (document.getElementById('codeInput').value || '').trim();
+  if (!c) { alert('Kod girin'); return; }
+  // Doğru uç nokta: /qr?code=...
+  document.getElementById('qrImg').src = `/qr?code=${encodeURIComponent(c)}`;
+});
+</script>
+
 
     <hr/>
 
