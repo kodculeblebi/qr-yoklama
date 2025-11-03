@@ -39,7 +39,8 @@ app.use((req, res, next) => {
 /* ===========================
    DOSYA YOLLARI & YARDIMCILAR
    =========================== */
-const DATA_DIR     = process.env.DATA_DIR || path.join(__dirname, 'data');
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
+
 const DATA_FILE    = path.join(DATA_DIR, 'attendance.json');
 const ROSTER_FILE  = path.join(DATA_DIR, 'roster.csv');
 const DEVICES_FILE = path.join(DATA_DIR, 'devices.json');
