@@ -5,14 +5,15 @@
   <title>Yönetici Paneli • QR Yoklama</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    body{font-family:system-ui,Arial,sans-serif;max-width:960px;margin:24px auto;padding:0 12px}
+    body{font-family:system-ui,Arial,sans-serif;max-width:1000px;margin:24px auto;padding:0 12px}
     .row{display:flex;gap:16px;flex-wrap:wrap}
     .card{flex:1 1 300px;border:1px solid #ddd;border-radius:12px;padding:16px}
-    input,button{font-size:16px;padding:8px}
+    input,button,textarea{font-size:16px;padding:8px}
     img{max-width:100%;height:auto;border:1px solid #eee;border-radius:8px}
     .ok{color:green}.err{color:#b00}.muted{color:#777}
     .pill{display:inline-block;background:#eef;padding:4px 10px;border-radius:999px}
     .hidden{display:none}
+    textarea{width:100%;height:140px}
   </style>
 </head>
 <body>
@@ -36,16 +37,19 @@
     <div class="row">
       <div class="card">
         <h3>1) Ders Kodunu Başlat</h3>
-        <p class="muted">Örn: YBS311-01</p>
+        <p class="muted">Örn: <b>ybs311 4.hafta -1</b> (kurs = <b>ybs311</b>)</p>
         <input id="codeInput" placeholder="Ders kodu" />
-        <button id="startBtn">Aktif Et</button>
+        <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap">
+          <button id="startBtn">Aktif Et</button>
+          <button id="stopBtn">QR'ı Durdur</button>
+        </div>
         <div style="margin-top:8px">Aktif Kod: <span id="activeCode" class="pill"></span></div>
         <div class="muted" id="since"></div>
       </div>
 
       <div class="card">
         <h3>2) QR’ı Aç (Ekrana Yansıt)</h3>
-        <p class="muted">Bu QR telefona okutulunca otomatik <b>/scan</b> açılır.</p>
+        <p class="muted">Bu QR okutulunca telefonlarda <b>/scan</b> açılır ve otomatik yoklama verilir (tanınıyorsa).</p>
         <img id="qrImg" alt="QR" />
         <div style="margin-top:8px">
           <a id="presentLink" target="_blank">/present (tam ekran)</a>
@@ -53,28 +57,30 @@
       </div>
 
       <div class="card">
-        <h3>3) Öğrenci Yoklama Ekranı</h3>
-        <p class="muted">Prova için kendi telefonunuzda açabilirsiniz.</p>
-        <a id="scanLink" target="_blank">/scan</a>
+        <h3>3) Anlık İndirmeler</h3>
+        <p class="muted">Aşağıdaki butonlar <b>aktif koda</b> göre indirir.</p>
+        <div style="display:flex; flex-direction:column; gap:8px">
+          <a id="dlRoster" class="muted" target="_blank">Bu ders Excel (✓/✗) indir</a>
+          <a id="dlRaw" class="muted" target="_blank">Bu ders Ham CSV indir</a>
+          <a id="dlMatrix" class="muted" target="_blank">Kurs Matrisi (tüm haftalar) indir</a>
+        </div>
       </div>
     </div>
 
     <div class="card">
-      <h3>Özet & Dışa Aktar</h3>
-      <input id="sumCode" placeholder="Kod (örn YBS311-01)" />
-      <button id="summaryBtn">Say</button>
-      <span id="sumOut"></span>
-      <div style="margin-top:8px">
-        <a id="csvRaw" class="muted" target="_blank">Ham CSV indir</a> &nbsp;•&nbsp;
-        <a id="xlsxRoster" class="muted" target="_blank">Excel (✓/✗) indir</a>
+      <h3>Roster (Sınıf Listesi) Yükle</h3>
+      <p class="muted">İlk satır <code>studentNo,name</code> olmalı. Örnek:<br>20123456,Ali Veli</p>
+      <textarea id="csvBox" placeholder="studentNo,name&#10;20123456,Ali Veli"></textarea>
+      <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap">
+        <button id="uploadBtn">Kaydet</button>
+        <span id="csvMsg" class="ok"></span>
       </div>
-      <div class="muted" style="margin-top:6px">Not: Excel (✓/✗) için /data/roster.csv dosyası gerekir (studentNo,name).</div>
     </div>
   </div>
 
 <script>
-async function jget(url){ const r=await fetch(url); if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }
-async function jpost(url,body){ const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})}); if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }
+async function jget(u){ const r=await fetch(u); if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }
+async function jpost(u,b){ const r=await fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{})}); if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }
 
 const authSection = document.getElementById('authSection');
 const main = document.getElementById('main');
@@ -104,7 +110,6 @@ async function initMain(){
   const since = document.getElementById('since');
   const qrImg = document.getElementById('qrImg');
   const presentLink = document.getElementById('presentLink');
-  const scanLink = document.getElementById('scanLink');
 
   async function refreshActive(){
     const a = await jget('/api/active-code');
@@ -112,8 +117,6 @@ async function initMain(){
     since.textContent = a.since ? ('Başlatıldı: ' + new Date(a.since).toLocaleString()) : '';
     const c = a.code || '';
     qrImg.src = c ? (`/qr?code=${encodeURIComponent(c)}&v=${Date.now()}`) : '';
-    presentLink.href = '/present';
-    scanLink.href = '/scan';
   }
   await refreshActive();
 
@@ -123,21 +126,54 @@ async function initMain(){
     await jpost('/api/active-code',{code:c});
     await refreshActive();
     alert('Aktif kod ayarlandı ve QR hazır.');
+    updateDownloadLinks();
   };
 
-  // Export/Summary
-  const sumCode = document.getElementById('sumCode');
-  const sumOut  = document.getElementById('sumOut');
-  const csvRaw  = document.getElementById('csvRaw');
-  const xlsxRoster = document.getElementById('xlsxRoster');
+  document.getElementById('stopBtn').onclick = async () => {
+    await jpost('/api/stop',{});
+    await refreshActive();
+    alert('Aktif QR durduruldu.');
+    updateDownloadLinks();
+  };
 
-  document.getElementById('summaryBtn').onclick = async () => {
-    const c = (sumCode.value||'').trim();
-    if(!c){ alert('Kod yazın'); return; }
-    const s = await jget('/api/summary?code='+encodeURIComponent(c));
-    sumOut.textContent = `Toplam: ${s.count}`;
-    csvRaw.href = '/api/export?code='+encodeURIComponent(c);
-    xlsxRoster.href = '/api/export-roster?code='+encodeURIComponent(c);
+  // Anlık indirme linkleri
+  const dlRoster = document.getElementById('dlRoster');
+  const dlRaw = document.getElementById('dlRaw');
+  const dlMatrix = document.getElementById('dlMatrix');
+  function courseOf(code) {
+    return (code || '').trim().split(/\s+/)[0].toLowerCase();
+  }
+  async function updateDownloadLinks(){
+    const a = await jget('/api/active-code');
+    const c = a.code || '';
+    if (!c){
+      dlRoster.removeAttribute('href');
+      dlRaw.removeAttribute('href');
+      dlMatrix.removeAttribute('href');
+      return;
+    }
+    dlRoster.href = '/api/export-roster?code=' + encodeURIComponent(c);
+    dlRaw.href    = '/api/export?code=' + encodeURIComponent(c);
+    const course = courseOf(c);
+    if (course) dlMatrix.href = '/api/export-matrix?course=' + encodeURIComponent(course);
+  }
+  await updateDownloadLinks();
+
+  // Roster upload
+  const csvBox = document.getElementById('csvBox');
+  const csvMsg = document.getElementById('csvMsg');
+  document.getElementById('uploadBtn').onclick = async () => {
+    csvMsg.textContent='';
+    const csv = (csvBox.value||'').trim();
+    if (!csv){ alert('CSV içeriği boş'); return; }
+    try{
+      const r = await jpost('/api/upload-roster',{ csv });
+      csvMsg.textContent = 'Kaydedildi. Kayıt sayısı: ' + (r.count ?? '?');
+    }catch(e){
+      csvMsg.textContent = 'Hata: CSV ilk satır studentNo,name olmalı';
+      csvMsg.className = 'err';
+      setTimeout(()=>{ csvMsg.className='ok'; csvMsg.textContent=''; }, 3000);
+    }
   };
 }
 </script>
