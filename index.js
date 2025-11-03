@@ -146,14 +146,15 @@ app.get('/favicon.ico', (req, res) => res.status(204).end());
    =========================== */
 app.get('/ping', (req, res) => res.send('pong 🏓'));
 app.get('/healthz', (req, res) => res.send('ok'));
-
-// ---- QR üretme (derin link ile)
+// ---- QR üretme: doğrudan /scan sayfasına giden LINK içeren QR üret
 app.get('/qr', async (req, res) => {
   try {
-    // İstenilen kod (t, code veya text parametresi ile gelebilir)
-    const code = (req.query.code || req.query.t || req.query.text || 'DEMO').toString().trim();
+    const code =
+      (req.query.code || req.query.t || req.query.text || 'DEMO')
+        .toString()
+        .trim();
 
-    // Tam URL: https://host/scan?code=...&auto=1
+    // ÖNEMLİ: QR içine DÜZ YAZI değil, tam URL koyuyoruz
     const baseUrl = `${req.protocol}://${req.get('host')}`;
     const deepLink = `${baseUrl}/scan?code=${encodeURIComponent(code)}&auto=1`;
 
@@ -163,12 +164,14 @@ app.get('/qr', async (req, res) => {
       margin: 2,
       scale: 6
     });
+
     res.set('Content-Type', 'image/png');
     res.send(pngBuffer);
   } catch (err) {
     console.error(err);
     res.status(500).send('QR üretilemedi');
   }
+});
 });
 });
 
