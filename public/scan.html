@@ -34,34 +34,41 @@
   const u = new URL(location.href);
   const codeFromUrl = u.searchParams.get('code');
   const auto = u.searchParams.get('auto') === '1';
+
   const codeInput = document.getElementById('code');
-  const snoInput = document.getElementById('studentNo');
+  const snoInput  = document.getElementById('studentNo');
   const nameInput = document.getElementById('name');
   const msg = document.getElementById('msg');
 
-  // 1) Kod: URL'den, yoksa sunucudan aktif kod
-  if (codeFromUrl) {
-    codeInput.value = codeFromUrl;
-  } else {
-    try{
-      const r = await fetch('/api/active-code'); const a = await r.json();
-      if (a.code) codeInput.value = a.code;
-    }catch{}
+  // 1) Kod: URL → yoksa sunucudaki aktif kod
+  if (codeFromUrl) codeInput.value = codeFromUrl;
+  else {
+    try { const a = await (await fetch('/api/active-code')).json(); if (a.code) codeInput.value = a.code; } catch {}
   }
 
-  // 2) Öğrenci No: cihazda hatırla
-  const savedNo = localStorage.getItem('studentNo');
-  if (savedNo && !snoInput.value) snoInput.value = savedNo;
+  // 2) Öğrenciyi sunucudan tanı (deviceId → studentNo map). Yoksa localStorage.
+  try {
+    const d = await (await fetch('/api/device')).json();
+    if (d?.info?.studentNo) {
+      snoInput.value = d.info.studentNo;
+      if (d.info.name && !nameInput.value) nameInput.value = d.info.name;
+    } else {
+      const savedNo = localStorage.getItem('studentNo');
+      if (savedNo && !snoInput.value) snoInput.value = savedNo;
+    }
+  } catch {}
 
-  async function send() {
+  async function send(){
     const code = (codeInput.value||'').trim();
     const studentNo = (snoInput.value||'').trim();
     const name = (nameInput.value||'').trim();
     if (!code) { msg.textContent='Kod yok'; msg.className='err'; return; }
     if (!studentNo) { msg.textContent='Öğrenci numarası gerekli'; msg.className='err'; return; }
 
+    // localStorage yedek (sunucu zaten map tutuyor)
     localStorage.setItem('studentNo', studentNo);
-    msg.textContent = 'Gönderiliyor...'; msg.className='muted';
+
+    msg.textContent='Gönderiliyor...'; msg.className='muted';
     try{
       const r = await fetch('/api/check-in', {
         method:'POST', headers:{'Content-Type':'application/json'},
@@ -69,19 +76,19 @@
       });
       const data = await r.json();
       if (data.status === 'success') {
-        msg.textContent = 'Başarılı: yoklama alındı ✅'; msg.className='ok';
+        msg.textContent='Başarılı: yoklama alındı ✅'; msg.className='ok';
+        codeInput.disabled = snoInput.disabled = nameInput.disabled = true;
       } else if (data.status === 'already_checked') {
-        msg.textContent = 'Bu kod için zaten yoklama verdiniz ✅'; msg.className='ok';
+        msg.textContent='Bu kod için zaten yoklama verdiniz ✅'; msg.className='ok';
+        codeInput.disabled = snoInput.disabled = nameInput.disabled = true;
       } else {
-        msg.textContent = 'Hata: '+(data.message||data.status); msg.className='err';
+        msg.textContent='Hata: '+(data.message||data.status); msg.className='err';
       }
-    }catch(e){
-      msg.textContent = 'Sunucu hatası'; msg.className='err';
-    }
+    }catch{ msg.textContent='Sunucu hatası'; msg.className='err'; }
   }
 
-  // İlk gelişte otomatik gönder: kod + öğrenciNo varsa
-  if ((codeInput.value || codeFromUrl) && (savedNo || snoInput.value) && auto) {
+  // QR ile geldiyse ve öğrenci tanındıysa otomatik gönder
+  if (auto && codeInput.value && (snoInput.value)) {
     setTimeout(send, 300);
   }
 

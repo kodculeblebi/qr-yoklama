@@ -5,138 +5,141 @@
   <title>Yönetici Paneli • QR Yoklama</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    body{font-family:system-ui,Arial,sans-serif;max-width:900px;margin:24px auto;padding:0 12px}
+    body{font-family:system-ui,Arial,sans-serif;max-width:960px;margin:24px auto;padding:0 12px}
     .row{display:flex;gap:16px;flex-wrap:wrap}
-    .card{flex:1 1 280px;border:1px solid #ddd;border-radius:12px;padding:16px}
+    .card{flex:1 1 300px;border:1px solid #ddd;border-radius:12px;padding:16px}
     input,button{font-size:16px;padding:8px}
     img{max-width:100%;height:auto;border:1px solid #eee;border-radius:8px}
-    .ok{color:green}.err{color:#b00}
-    .muted{color:#777}
+    .ok{color:green}.err{color:#b00}.muted{color:#777}
     .pill{display:inline-block;background:#eef;padding:4px 10px;border-radius:999px}
+    .hidden{display:none}
   </style>
 </head>
 <body>
   <h1>Yönetici Paneli</h1>
 
-  <!-- Giriş -->
-  <div class="card">
+  <!-- Auth -->
+  <div class="card" id="authSection">
     <h3>Giriş</h3>
-    <div id="authBox">
-      <input id="u" placeholder="Kullanıcı adı" />
-      <input id="p" placeholder="Şifre" type="password" />
-      <button id="loginBtn">Giriş</button>
-      <span id="authMsg" class="err"></span>
-    </div>
-    <div id="authedBox" style="display:none">
-      <span class="ok">Giriş yapıldı</span>
-      <button id="logoutBtn">Çıkış</button>
-    </div>
+    <input id="u" placeholder="Kullanıcı adı" />
+    <input id="p" placeholder="Şifre" type="password" />
+    <button id="loginBtn">Giriş</button>
+    <span id="authMsg" class="err"></span>
   </div>
 
-  <!-- Aktif kod & QR başlat -->
-  <div class="row">
+  <div id="main" class="hidden">
     <div class="card">
-      <h3>1) Ders Kodunu Başlat</h3>
-      <p class="muted">Örn: YBS311-01</p>
-      <input id="codeInput" placeholder="Ders kodu" />
-      <button id="startBtn">Aktif Et</button>
-      <div style="margin-top:8px">Aktif Kod: <span id="activeCode" class="pill"></span></div>
-      <div class="muted" id="since"></div>
+      <div class="ok">Giriş yapıldı</div>
+      <button id="logoutBtn">Çıkış</button>
     </div>
 
-    <div class="card">
-      <h3>2) QR’ı Aç (Ekrana Yansıt)</h3>
-      <p class="muted">Bu QR telefona okutulunca otomatik <b>/scan</b> açılır.</p>
-      <img id="qrImg" alt="QR" />
-      <div style="margin-top:8px">
-        <a id="presentLink" target="_blank">/present (tam ekran)</a>
+    <div class="row">
+      <div class="card">
+        <h3>1) Ders Kodunu Başlat</h3>
+        <p class="muted">Örn: YBS311-01</p>
+        <input id="codeInput" placeholder="Ders kodu" />
+        <button id="startBtn">Aktif Et</button>
+        <div style="margin-top:8px">Aktif Kod: <span id="activeCode" class="pill"></span></div>
+        <div class="muted" id="since"></div>
+      </div>
+
+      <div class="card">
+        <h3>2) QR’ı Aç (Ekrana Yansıt)</h3>
+        <p class="muted">Bu QR telefona okutulunca otomatik <b>/scan</b> açılır.</p>
+        <img id="qrImg" alt="QR" />
+        <div style="margin-top:8px">
+          <a id="presentLink" target="_blank">/present (tam ekran)</a>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>3) Öğrenci Yoklama Ekranı</h3>
+        <p class="muted">Prova için kendi telefonunuzda açabilirsiniz.</p>
+        <a id="scanLink" target="_blank">/scan</a>
       </div>
     </div>
 
     <div class="card">
-      <h3>3) Yoklama Ekranını Aç</h3>
-      <p class="muted">Prova için kendi telefonunuzda /scan’i açın.</p>
-      <a id="scanLink" target="_blank">/scan</a>
-    </div>
-  </div>
-
-  <!-- Özet/Export -->
-  <div class="card">
-    <h3>Özet & Dışa Aktar</h3>
-    <input id="sumCode" placeholder="Kod (örn YBS311-01)" />
-    <button id="summaryBtn">Say</button>
-    <span id="sumOut"></span>
-    <div style="margin-top:8px">
-      <a id="csvRaw" class="muted" target="_blank">Ham CSV indir</a>
+      <h3>Özet & Dışa Aktar</h3>
+      <input id="sumCode" placeholder="Kod (örn YBS311-01)" />
+      <button id="summaryBtn">Say</button>
+      <span id="sumOut"></span>
+      <div style="margin-top:8px">
+        <a id="csvRaw" class="muted" target="_blank">Ham CSV indir</a> &nbsp;•&nbsp;
+        <a id="xlsxRoster" class="muted" target="_blank">Excel (✓/✗) indir</a>
+      </div>
+      <div class="muted" style="margin-top:6px">Not: Excel (✓/✗) için /data/roster.csv dosyası gerekir (studentNo,name).</div>
     </div>
   </div>
 
 <script>
-async function post(url, body){
-  const r = await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})});
-  if (!r.ok) throw new Error('HTTP '+r.status);
-  return r.json();
-}
-async function get(url){ const r=await fetch(url); if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }
+async function jget(url){ const r=await fetch(url); if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }
+async function jpost(url,body){ const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})}); if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }
 
-const authBox = document.getElementById('authBox');
-const authedBox = document.getElementById('authedBox');
+const authSection = document.getElementById('authSection');
+const main = document.getElementById('main');
 const authMsg = document.getElementById('authMsg');
+
+async function checkAdmin(){
+  try{
+    const me = await jget('/api/is-admin');
+    if (me.isAdmin){ authSection.classList.add('hidden'); main.classList.remove('hidden'); initMain(); }
+    else { authSection.classList.remove('hidden'); main.classList.add('hidden'); }
+  }catch{ authSection.classList.remove('hidden'); main.classList.add('hidden'); }
+}
+checkAdmin();
 
 document.getElementById('loginBtn').onclick = async () => {
   authMsg.textContent='';
   try{
-    await post('/login',{username:document.getElementById('u').value, password:document.getElementById('p').value});
-    authBox.style.display='none'; authedBox.style.display='';
+    await jpost('/login',{username:document.getElementById('u').value, password:document.getElementById('p').value});
+    await checkAdmin();
   }catch(e){ authMsg.textContent='Giriş başarısız'; }
 };
-document.getElementById('logoutBtn').onclick = async () => {
-  await post('/logout',{});
-  location.reload();
-};
+document.getElementById('logoutBtn').onclick = async ()=>{ await jpost('/logout',{}); await checkAdmin(); };
 
-const codeInput = document.getElementById('codeInput');
-const activeCode = document.getElementById('activeCode');
-const since = document.getElementById('since');
-const qrImg = document.getElementById('qrImg');
-const presentLink = document.getElementById('presentLink');
-const scanLink = document.getElementById('scanLink');
+async function initMain(){
+  const codeInput = document.getElementById('codeInput');
+  const activeCode = document.getElementById('activeCode');
+  const since = document.getElementById('since');
+  const qrImg = document.getElementById('qrImg');
+  const presentLink = document.getElementById('presentLink');
+  const scanLink = document.getElementById('scanLink');
 
-async function refreshActive(){
-  try{
-    const a = await get('/api/active-code');
+  async function refreshActive(){
+    const a = await jget('/api/active-code');
     activeCode.textContent = a.code || '(yok)';
     since.textContent = a.since ? ('Başlatıldı: ' + new Date(a.since).toLocaleString()) : '';
-    const code = a.code || '';
-    qrImg.src = code ? (`/qr?code=${encodeURIComponent(code)}&v=${Date.now()}`) : '';
+    const c = a.code || '';
+    qrImg.src = c ? (`/qr?code=${encodeURIComponent(c)}&v=${Date.now()}`) : '';
     presentLink.href = '/present';
-    presentLink.textContent = '/present (tam ekran)';
     scanLink.href = '/scan';
-    scanLink.textContent = '/scan';
-  }catch(e){
-    console.error(e);
   }
-}
-refreshActive();
+  await refreshActive();
 
-document.getElementById('startBtn').onclick = async () => {
-  const code = (codeInput.value||'').trim();
-  if(!code){ alert('Ders kodu yazın'); return; }
-  try{
-    await post('/api/active-code',{code});
+  document.getElementById('startBtn').onclick = async () => {
+    const c = (codeInput.value||'').trim();
+    if(!c){ alert('Ders kodu yazın'); return; }
+    await jpost('/api/active-code',{code:c});
     await refreshActive();
     alert('Aktif kod ayarlandı ve QR hazır.');
-  }catch(e){ alert('Hata: Giriş yapmadınız mı?'); }
-};
+  };
 
-// Özet
-document.getElementById('summaryBtn').onclick = async () => {
-  const c = (document.getElementById('sumCode').value || '').trim();
-  if(!c){ alert('Kod yazın'); return; }
-  const s = await get('/api/summary?code='+encodeURIComponent(c));
-  document.getElementById('sumOut').textContent = `Toplam: ${s.count}`;
-  document.getElementById('csvRaw').href = '/api/export?code='+encodeURIComponent(c);
-};
+  // Export/Summary
+  const sumCode = document.getElementById('sumCode');
+  const sumOut  = document.getElementById('sumOut');
+  const csvRaw  = document.getElementById('csvRaw');
+  const xlsxRoster = document.getElementById('xlsxRoster');
+
+  document.getElementById('summaryBtn').onclick = async () => {
+    const c = (sumCode.value||'').trim();
+    if(!c){ alert('Kod yazın'); return; }
+    const s = await jget('/api/summary?code='+encodeURIComponent(c));
+    sumOut.textContent = `Toplam: ${s.count}`;
+    csvRaw.href = '/api/export?code='+encodeURIComponent(c);
+    xlsxRoster.href = '/api/export-roster?code='+encodeURIComponent(c);
+  };
+}
 </script>
 </body>
 </html>
