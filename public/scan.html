@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>QR Tarayıcı</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 1rem; }
+    .card { max-width: 720px; padding: 1rem; border:1px solid #ddd; border-radius: 12px; }
+    #reader { width: 320px; margin-top: 1rem; }
+    .row { display:flex; gap:.5rem; flex-wrap:wrap; margin:.5rem 0; }
+    input[type="text"] { flex:1; min-width: 260px; padding:.6rem .8rem; border:1px solid #bbb; border-radius:8px; }
+    button { padding:.6rem 1rem; border:1px solid #222; background:#222; color:#fff; border-radius:8px; cursor:pointer; }
+    .msg { margin-top:.5rem; font-weight:bold; }
+    a { display:inline-block; margin:.5rem 0; }
+
+    /* Tam ekran başarı katmanı */
+    .overlay {
+      position: fixed; inset: 0; display: none;
+      align-items: center; justify-content: center;
+      background: rgba(0,0,0,0.4); z-index: 9999;
+    }
+    .overlay .box {
+      background: #0bbf5e; color: #fff; padding: 2rem;
+      border-radius: 16px; text-align: center; max-width: 420px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    }
+    .overlay h2 { margin: 0 0 .5rem 0; font-size: 1.6rem; }
+    .overlay p { margin: .25rem 0; }
+    .overlay .small { opacity: .95; font-size: .95rem; }
+  </style>
+  <script src="https://unpkg.com/html5-qrcode"></script>
+</head>
+<body>
+  <div class="card">
+    <h2>QR Tarayıcı</h2>
+    <p>Kamerayı açıp QR’ı okut. Kod okununca profilin (Ad/No) otomatik eklenir ve yoklama gönderilir.</p>
+
+    <div id="reader"></div>
+
+    <div class="row">
+      <input id="codeInput" type="text" placeholder="Okunan yoklama kodu" />
+      <button id="checkBtn">Yoklamayı Ver</button>
+    </div>
+
+    <!-- Profil (cihazda saklanır + sunucuda device profile olarak tutulur) -->
+    <div class="row">
+      <input id="nameInput" type="text" placeholder="Ad Soyad" />
+      <input id="noInput" type="text" placeholder="Öğrenci No" />
+    </div>
+
+    <div id="msg" class="msg"></div>
+
+    <a href="/">← Ana Sayfa</a>
+  </div>
+
+  <!-- YEŞİL BAŞARI KATMANI -->
+  <div id="okOverlay" class="overlay" role="dialog" aria-live="assertive">
+    <div class="box">
+      <h2>✅ Yoklama Alındı</h2>
+      <p id="okCode" class="small"></p>
+      <p id="okWhen" class="small"></p>
+      <p class="small">Bu cihaz tanındı. Tekrar okutursan otomatik gönderilir.</p>
+    </div>
+  </div>
+
+  <script>
+    const codeInput = document.getElementById('codeInput');
+    const checkBtn = document.getElementById('checkBtn');
+    const nameInput = document.getElementById('nameInput');
+    const noInput   = document.getElementById('noInput');
+    const msg = document.getElementById('msg');
+
+    const okOverlay = document.getElementById('okOverlay');
+    const okCode = document.getElementById('okCode');
+    const okWhen = document.getElementById('okWhen');
+
+    // Profil: önce localStorage, sonra sunucudan cihaz profili
+    (async function preloadProfile(){
+      const savedName = localStorage.getItem('qr_name') || '';
+      const savedNo   = localStorage.getItem('qr_studentNo') || '';
+      if (savedName) nameInput.value = savedName;
+      if (savedNo)   noInput.value   = savedNo;
+
+      if (!savedName || !savedNo) {
+        try {
+          const r = await fetch('/api/device-profile');
+          if (r.ok) {
+            const p = await r.json();
+            if (p.name && !nameInput.value) nameInput.value = p.name;
+            if (p.studentNo && !noInput.value) noInput.value = p.studentNo;
+            // localStorage'a da yazalım
+            if (p.name) localStorage.setItem('qr_name', p.name);
+            if (p.studentNo) localStorage.setItem('qr_studentNo', p.studentNo);
+          }
+        } catch(e) {}
+      }
+    })();
+
+    nameInput.addEventListener('input', () => {
+      localStorage.setItem('qr_name', nameInput.value.trim());
+    });
+    noInput.addEventListener('input', () => {
+      localStorage.setItem('qr_studentNo', noInput.value.trim());
+    });
+
+    function showSuccessOverlay(code) {
+      if (navigator.vibrate) navigator.vibrate(60);
+      okCode.textContent = 'Kod: ' + (code || '-');
+      okWhen.textContent = 'Zaman: ' + new Date().toLocaleString();
+      okOverlay.style.display = 'flex';
+      setTimeout(() => { okOverlay.style.display = 'none'; }, 2000);
+    }
+
+    async function registerDeviceProfile(name, studentNo) {
+      try {
+        if (!name && !studentNo) return;
+        await fetch('/api/register-device', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ name, studentNo })
+        });
+      } catch(e) { /* sessiz */ }
+    }
+
+    async function sendCheckIn(code) {
+      msg.textContent = 'Gönderiliyor...';
+      const name = nameInput.value.trim();
+      const studentNo = noInput.value.trim();
+
+      // profili cihazda sakla + sunucuda kaydet (dayanıklılık)
+      localStorage.setItem('qr_name', name);
+      localStorage.setItem('qr_studentNo', studentNo);
+      registerDeviceProfile(name, studentNo);
+
+      try {
+        const res = await fetch('/api/check-in', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code, name, studentNo })
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+          msg.textContent = '✅ Yoklama alındı.';
+          showSuccessOverlay(code);
+        } else if (data.status === 'already_checked') {
+          msg.textContent = '⚠️ Bu cihaz bu yoklamayı zaten vermiş.';
+        } else {
+          msg.textContent = '❌ Hata: ' + (data.message || 'Bilinmeyen hata');
+        }
+      } catch(e) {
+        msg.textContent = '❌ Sunucu hatası veya bağlantı sorunu';
+      }
+    }
+
+    checkBtn.addEventListener('click', () => {
+      const code = codeInput.value.trim();
+      if (!code) { msg.textContent = 'Kod boş olamaz.'; return; }
+      sendCheckIn(code);
+    });
+
+    function onScanSuccess(decodedText) {
+      codeInput.value = decodedText;
+      sendCheckIn(decodedText);
+    }
+
+    // Kamera başlat
+    const html5QrCode = new Html5Qrcode("reader");
+    Html5Qrcode.getCameras().then(devices => {
+      const camId = devices && devices.length ? devices[0].id : null;
+      if (!camId) { msg.textContent = 'Kamera bulunamadı.'; return; }
+      html5QrCode.start(camId, { fps: 10, qrbox: 220 }, onScanSuccess, () => {});
+    }).catch(() => {
+      msg.textContent = 'Kameraya erişilemedi. Tarayıcıdan izin verin.';
+    });
+  </script>
+</body>
+</html>

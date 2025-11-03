@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin Girişi</title>
+  <style>
+    body { font-family: Arial, sans-serif; display:flex; align-items:center; justify-content:center; min-height:100vh; margin:0; background:#f7f7f8; }
+    .card { width: 360px; padding: 1.2rem; background:#fff; border:1px solid #e5e7eb; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.04); }
+    h2 { margin:.2rem 0 1rem 0; text-align:center; }
+    .row { display:flex; flex-direction:column; gap:.35rem; margin:.6rem 0; }
+    input[type="text"], input[type="password"] { padding:.6rem .8rem; border:1px solid #bbb; border-radius:8px; }
+    button { width:100%; padding:.7rem 1rem; border:1px solid #111; background:#111; color:#fff; border-radius:8px; cursor:pointer; }
+    .msg { color:#b91c1c; font-size: 13px; min-height: 20px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Admin Girişi</h2>
+    <div class="row">
+      <label>Kullanıcı Adı</label>
+      <input id="u" type="text" placeholder="admin" />
+    </div>
+    <div class="row">
+      <label>Şifre</label>
+      <input id="p" type="password" placeholder="••••••••" />
+    </div>
+    <div class="msg" id="m"></div>
+    <button id="btn">Giriş Yap</button>
+  </div>
+
+  <script>
+    const u = document.getElementById('u');
+    const p = document.getElementById('p');
+    const m = document.getElementById('m');
+    const b = document.getElementById('btn');
+
+    b.addEventListener('click', async () => {
+      m.textContent = '';
+      try {
+        const r = await fetch('/api/login', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ username: u.value.trim(), password: p.value.trim() })
+        });
+        if (r.ok) {
+          window.location.href = '/admin';
+        } else {
+          const j = await r.json().catch(() => ({}));
+          m.textContent = j.error || 'Hatalı giriş';
+        }
+      } catch {
+        m.textContent = 'Sunucu hatası';
+      }
+    });
+  </script>
+</body>
+</html>

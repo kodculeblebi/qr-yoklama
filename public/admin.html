@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Yönetici Paneli</title>
+
+  <style>
+    :root { --border:#e5e7eb; --muted:#6b7280; }
+    body { font-family: Arial, sans-serif; margin: 1rem; }
+    .card { max-width: 1100px; padding: 1rem; border:1px solid var(--border); border-radius: 12px; margin:auto; }
+    h2 { margin:.2rem 0 1rem 0; }
+    .row { display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; margin:.5rem 0; }
+    input[type="text"], input[type="search"] { flex:1; min-width: 220px; padding:.55rem .7rem; border:1px solid #bbb; border-radius:8px; }
+    button { padding:.55rem .9rem; border:1px solid #111; background:#111; color:#fff; border-radius:8px; cursor:pointer; }
+    button.secondary { background:#fff; color:#111; }
+    .muted { color:var(--muted); font-size:12px; }
+    table { width:100%; border-collapse:collapse; margin-top:.5rem; }
+    th, td { border:1px solid var(--border); padding:.45rem .6rem; text-align:left; }
+    th { background:#fafafa; }
+    .ok { color:#0a8a0a; font-weight:bold; }
+    .bad { color:#b91c1c; font-weight:bold; }
+    details { margin:.5rem 0; }
+    .pill { display:inline-block; padding:.2rem .5rem; border:1px solid var(--border); border-radius:999px; font-size:12px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Yönetici Paneli</h2>
+<div class="row">
+  <button id="logoutBtn" class="secondary">Çıkış Yap</button>
+</div>
+<script>
+  const logoutBtn = document.getElementById('logoutBtn');
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', async () => {
+      try { await fetch('/api/logout', { method:'POST' }); } catch {}
+      window.location.href = '/login';
+    });
+  }
+</script>
+
+
+    <!-- KOD İŞLEMLERİ -->
+    <div class="row">
+      <input id="code" type="text" placeholder="Yoklama kodu (örn: YBS311-TEST-1)" />
+      <button id="btnSummary">Kodu Getir</button>
+      <button id="btnAll" class="secondary">Tüm Kodlar</button>
+      <button id="btnReset" class="secondary" title="Bu kodun kayıtlarını siler">Bu Kodu Sıfırla</button>
+    </div>
+
+    <div id="one"></div>
+
+    <table id="allTable" style="display:none">
+      <thead><tr><th>Kod</th><th>Sayı</th></tr></thead>
+      <tbody id="allBody"></tbody>
+    </table>
+    <div id="allEmpty" class="muted" style="display:none">Henüz yok.</div>
+
+    <hr/>
+
+    <!-- ROSTER (TİKLİ TABLO) -->
+    <div class="row">
+      <input id="rosterCode" type="text" placeholder="Roster için kod (örn: YBS311-TEST-1)" />
+      <button id="btnRoster">Tikli Listeyi Göster</button>
+      <button id="btnExcelRoster" class="secondary" title="✓/✗ ile Excel indir">Excel (✓/✗) İndir</button>
+      <button id="btnExcelRaw" class="secondary" title="Ham kayıtları CSV indir">Ham CSV İndir</button>
+      <input id="search" type="search" placeholder="İsim/No ara" style="max-width:260px" />
+    </div>
+
+    <div id="rosterSummary" class="muted"></div>
+
+    <table id="rosterTable" style="display:none">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Öğrenci No</th>
+          <th>Ad Soyad</th>
+          <th>Durum</th>
+          <th>Zaman</th>
+        </tr>
+      </thead>
+      <tbody id="rosterBody"></tbody>
+    </table>
+    <div id="rosterEmpty" class="muted" style="display:none">Liste bulunamadı.</div>
+
+    <p class="muted">
+      <span class="pill">İpucu</span> Roster için <code>data/roster.csv</code> dosyanız olmalı. Öğrencilerin yoklama verirken numara girmesi kesin eşleşme sağlar.
+    </p>
+
+    <p><a href="/">← Ana Sayfa</a></p>
+  </div>
+
+  <script>
+    const codeEl = document.getElementById('code');
+    const oneDiv = document.getElementById('one');
+    const btnSummary = document.getElementById('btnSummary');
+    const btnAll = document.getElementById('btnAll');
+    const btnReset = document.getElementById('btnReset');
+
+    const allTable = document.getElementById('allTable');
+    const allBody = document.getElementById('allBody');
+    const allEmpty = document.getElementById('allEmpty');
+
+    const rosterCodeEl = document.getElementById('rosterCode');
+    const btnRoster = document.getElementById('btnRoster');
+    const rosterSummary = document.getElementById('rosterSummary');
+    const rosterTable = document.getElementById('rosterTable');
+    const rosterBody = document.getElementById('rosterBody');
+    const rosterEmpty = document.getElementById('rosterEmpty');
+    const btnExcelRoster = document.getElementById('btnExcelRoster');
+    const btnExcelRaw = document.getElementById('btnExcelRaw');
+    const searchEl = document.getElementById('search');
+
+    /* ---- TEK KOD ÖZETİ ---- */
+    btnSummary.addEventListener('click', async () => {
+      const code = codeEl.value.trim();
+      if (!code) return;
+      oneDiv.textContent = 'Yükleniyor...';
+      try {
+        const r = await fetch('/api/summary?code=' + encodeURIComponent(code));
+        const data = await r.json();
+        oneDiv.innerHTML = `
+          <h3>Kod: ${data.code || code}</h3>
+          <p>Katılım sayısı: <b>${data.count || 0}</b></p>
+          <details><summary>Cihaz listesi (maskeli)</summary>
+            <pre>${(data.devices || []).join('\n') || '-'}</pre>
+          </details>
+        `;
+      } catch {
+        oneDiv.textContent = 'Sunucu hatası.';
+      }
+    });
+
+    /* ---- TÜM KODLAR ---- */
+    btnAll.addEventListener('click', loadAll);
+    async function loadAll(){
+      allBody.innerHTML = '';
+      allTable.style.display = 'none';
+      allEmpty.style.display = 'none';
+      try {
+        const r = await fetch('/api/summary-all');
+        const data = await r.json();
+        if (!Array.isArray(data) || data.length === 0) {
+          allEmpty.style.display = 'block';
+          return;
+        }
+        for (const row of data) {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td>${row.code}</td><td>${row.count}</td>`;
+          allBody.appendChild(tr);
+        }
+        allTable.style.display = 'table';
+      } catch {
+        allEmpty.textContent = 'Sunucu hatası.';
+        allEmpty.style.display = 'block';
+      }
+    }
+
+    /* ---- KOD SIFIRLA ---- */
+    btnReset.addEventListener('click', async () => {
+      const code = codeEl.value.trim();
+      if (!code) return alert('Kod girin');
+      if (!confirm(`${code} kodunu sıfırlamak istiyor musun?`)) return;
+      try {
+        const r = await fetch('/api/reset', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ code })
+        });
+        const data = await r.json();
+        alert(data.message || 'Tamamlandı');
+        loadAll();
+      } catch { alert('Sunucu hatası'); }
+    });
+
+    /* ---- ROSTER: TİKLİ TABLO ---- */
+    let currentRoster = []; // filtreleme için tutuyoruz
+
+    btnRoster.addEventListener('click', async () => {
+      const code = rosterCodeEl.value.trim();
+      if (!code) return;
+      rosterSummary.textContent = 'Yükleniyor...';
+      rosterBody.innerHTML = '';
+      rosterTable.style.display = 'none';
+      rosterEmpty.style.display = 'none';
+
+      try {
+        const r = await fetch('/api/roster-status?code=' + encodeURIComponent(code));
+        const { total=0, present=0, list=[] } = await r.json();
+
+        currentRoster = list;
+        rosterSummary.innerHTML = `Kod: <b>${code}</b> — Toplam: <b>${total}</b> • Gelen: <b class="ok">${present}</b> • Gel(e)meyen: <b class="bad">${total - present}</b>`;
+
+        if (!Array.isArray(list) || list.length === 0) {
+          rosterEmpty.style.display = 'block';
+          return;
+        }
+
+        renderRoster(list);
+        rosterTable.style.display = 'table';
+      } catch {
+        rosterSummary.textContent = 'Sunucu hatası.';
+      }
+    });
+
+    function renderRoster(list){
+      rosterBody.innerHTML = '';
+      let i = 1;
+      for (const s of list) {
+        const tr = document.createElement('tr');
+        const mark = s.present ? '✓' : '✗';
+        const cls  = s.present ? 'ok' : 'bad';
+        tr.innerHTML = `
+          <td>${i++}</td>
+          <td>${s.studentNo || ''}</td>
+          <td>${s.name || ''}</td>
+          <td class="${cls}">${mark}</td>
+          <td>${s.time ? new Date(s.time).toLocaleString() : ''}</td>
+        `;
+        rosterBody.appendChild(tr);
+      }
+    }
+
+    /* ---- ROSTER: ARAMA/FİLTRE ---- */
+    searchEl.addEventListener('input', () => {
+      const q = searchEl.value.trim().toLowerCase();
+      if (!q) { renderRoster(currentRoster); return; }
+      const filtered = currentRoster.filter(s =>
+        String(s.studentNo || '').toLowerCase().includes(q) ||
+        String(s.name || '').toLowerCase().includes(q)
+      );
+      renderRoster(filtered);
+    });
+
+    /* ---- EXCEL İNDİR (✓/✗) ---- */
+    btnExcelRoster.addEventListener('click', () => {
+      const code = rosterCodeEl.value.trim();
+      if (!code) return alert('Kod girin');
+      window.location.href = '/api/export-roster?code=' + encodeURIComponent(code);
+    });
+
+    /* ---- HAM CSV İNDİR ---- */
+    btnExcelRaw.addEventListener('click', () => {
+      const code = rosterCodeEl.value.trim();
+      if (!code) return alert('Kod girin');
+      window.location.href = '/api/export?code=' + encodeURIComponent(code);
+    });
+
+    // Sayfa açılınca tüm kodları isteğe bağlı yüklemek istersen aç:
+    // loadAll();
+  </script>
+</body>
+</html>

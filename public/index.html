@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>QR Yoklama - Ana Sayfa</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2rem; }
+    .card { max-width: 720px; padding: 1.5rem; border: 1px solid #ddd; border-radius: 12px; }
+    h1 { margin-top: 0; }
+    .ok { color: #0a8a0a; font-weight: bold; }
+    .row { display: flex; gap: .5rem; margin: 1rem 0; flex-wrap: wrap;}
+    input[type="text"] { flex:1; min-width: 220px; padding: .6rem .8rem; border: 1px solid #bbb; border-radius: 8px; }
+    button { padding: .6rem 1rem; border: 1px solid #222; background:#222; color:#fff; border-radius: 8px; cursor:pointer; }
+    button:disabled { opacity: .6; cursor: not-allowed; }
+    img { display:block; margin-top:1rem; border:1px solid #eee; border-radius: 8px; max-width: 256px; }
+    small { color:#555 }
+    .msg { margin-top: 10px; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>QR Yoklama</h1>
+    <p class="ok">Sunucu çalışıyor ise bu sayfayı görürsün ✅</p>
+
+    <!-- QR üretme -->
+    <div class="row">
+      <input id="qrText" type="text" placeholder="QR içine yazılacak metin (örn: DÜYBS-2025-11-02-1)" />
+      <button id="makeQr">QR Oluştur</button>
+    </div>
+    <small>İpucu: Metne yoklama kodu yaz. Örn: <b>DÜYBS-2025-11-02-1</b></small>
+    <img id="qrImage" alt="QR görüntüsü burada belirecek" />
+
+    <hr/>
+
+    <!-- Yoklama verme -->
+    <h3>Yoklamaya Katıl</h3>
+    <div class="row">
+      <input id="codeInput" type="text" placeholder="Yoklama kodu (örn: DÜYBS-2025-11-02-1)" />
+    </div>
+    <div class="row">
+      <input id="nameInput" type="text" placeholder="Ad Soyad (isteğe bağlı)" />
+      <input id="noInput" type="text" placeholder="Öğrenci No (isteğe bağlı)" />
+    </div>
+    <div class="row">
+      <button id="checkInBtn">Yoklamayı Ver</button>
+    </div>
+    <div id="msg" class="msg"></div>
+
+    <p>
+      <a href="/scan">📷 QR Tarayıcı</a> |
+      <a href="/admin">🛠️ Yönetici Paneli</a> |
+      <a href="/ping" target="_blank">/ping</a>
+    </p>
+  </div>
+
+  <script>
+    // ---- QR oluşturma
+    const qrInput = document.getElementById('qrText');
+    const makeQrBtn = document.getElementById('makeQr');
+    const img = document.getElementById('qrImage');
+
+    function updateQrBtn(){
+      makeQrBtn.disabled = !qrInput.value.trim();
+    }
+    updateQrBtn();
+    qrInput.addEventListener('input', updateQrBtn);
+
+    makeQrBtn.addEventListener('click', () => {
+      const val = qrInput.value.trim();
+      if (!val) return;
+      // Sunucudaki /qr endpoint'inden PNG al
+      const url = '/qr?t=' + encodeURIComponent(val);
+      img.src = url;
+    });
+
+    // ---- Yoklama verme
+    const codeInput = document.getElementById('codeInput');
+    const nameInput = document.getElementById('nameInput');
+    const noInput   = document.getElementById('noInput');
+    const checkInBtn = document.getElementById('checkInBtn');
+    const msg = document.getElementById('msg');
+
+    checkInBtn.addEventListener('click', async () => {
+      const code = codeInput.value.trim();
+      const name = nameInput.value.trim();
+      const studentNo = noInput.value.trim();
+      if (!code) { msg.textContent = 'Lütfen yoklama kodu girin.'; return; }
+
+      msg.textContent = 'Gönderiliyor...';
+      try {
+        const res = await fetch('/api/check-in', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code, name, studentNo })
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+          msg.textContent = '✅ Yoklama alındı (bu cihaz için 1 kez).';
+        } else if (data.status === 'already_checked') {
+          msg.textContent = '⚠️ Bu cihaz bu yoklamayı zaten vermiş.';
+        } else {
+          msg.textContent = '❌ Hata: ' + (data.message || 'Bilinmeyen hata');
+        }
+      } catch (e) {
+        msg.textContent = '❌ Sunucu hatası veya bağlantı sorunu';
+      }
+    });
+  </script>
+</body>
+</html>
